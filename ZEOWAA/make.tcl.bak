@@ -1,0 +1,3 @@
+quartus_cdb j1_cpu -c top --update_mif
+execute_flow -compile
+quartus_pgm  ./output_files/chain1.cdf

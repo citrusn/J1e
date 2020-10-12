@@ -50,3 +50,14 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+Backup/
+Include/
+Simulator/
+ZEOWAA/db/
+ZEOWAA/incremental_db/
+ZEOWAA/output_files/
+Bin2Mif/
+greybox_tmp/
+Lib/
+synth/
+Ay_emul/
