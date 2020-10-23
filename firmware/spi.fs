@@ -10,14 +10,13 @@ module[ spi"
         d# 0 spi_sck !
     loop
 ;
-
 : spi-wr        spix drop ;
 : spi-rd        h# ff spix ;
 : spi-dummy     spi-rd drop ;
 : spi-rd16      spi-rd d# 8 lshift spi-rd or ;
-\ : spi-rd16m     spi-rd spi-rd d# 8 rshift or ; \ sds
+\ : spi-rd16be     spi-rd spi-rd d# 8 lshift or ; \ sds
 : spi-wr16      dup d# 8 rshift spi-wr spi-wr ;
-\ : spi-wr16m     dup spi-wr d# 8 rshift spi-wr ; \ sds
+\ : spi-wr16be     dup spi-wr d# 8 rshift spi-wr ; \ sds
 : spi-wrbuf     ( addr u -- ) 
     0do dup @ spi-wr16 2+ loop drop ;
 
@@ -29,6 +28,11 @@ h# fe constant DATA_TOKEN_CMD24
 h# fc constant DATA_TOKEN_CMD25
 
 create buffer 512 allot
+
+: emit-uart1 drop ;
+create 'sd-read-bytes
+ meta emit-uart1 t, target
+: sd-read-bytes 'sd-read-bytes @ execute ;
 
 create CMD0 
     h# 4000 ( CMD0 ) , ( h# 0 , )
@@ -64,28 +68,25 @@ create CMD58
 : sd-readR1 ( -- r1) 
     h# FF spix \ must be FF
 ;
-
 : sd-dummy ( -- ) 
     h# FF spix drop \ must be FF
 ;
-
 \ читаем два байта в одно 16 битное слово
-: sd-read-2bytes ( buff buff_size -- )   
+: sd-read-MEM ( buff buff_size -- )    
     \ только четное число байт
-    d# 1 rshift
-    0do 
-        dup \ адрес 
-        \ читаем 2 байта, первый младший собрать 16 бит
-        \ spi-rd spi-rd d# 8 lshift or 
+    d# 1 rshift \ 1024
+    \ over . dup . 
+    0do
+        dup \ адрес
+        \ spi-rd spi-rd d# 8 lshift or
         spi-rd16
-        swap ! 
+        swap !
         d# 2 +
-    loop    
-    drop 
+    loop
+    drop
 ;
-
-\ читаем один байт в одно 16 битное слово
-: sd-read-1bytes ( buff buff_size -- )       
+\ читаем один байт в одно 8 битное слово памяти ВВ
+: sd-read-IO ( buff buff_size -- )       
     0do 
         dup ( buff buff )     
         spi-rd
@@ -94,7 +95,6 @@ create CMD58
     loop    
     drop 
 ;
-
 \ читаем сектор с карты в память спрайта
 : sd-read-sprite ( adr_spr buff_size -- )
     \ snap
@@ -107,8 +107,8 @@ create CMD58
     loop    
     drop 
 ;
- 
-: sd-write-bytes ( buff buff_size -- ) 
+\ в одном слове два байта значимы
+: sd-write-2bytes ( buff buff_size -- )     
     \ только четное число байт
     d# 1 rshift
     0do 
@@ -116,6 +116,15 @@ create CMD58
         \ dup d# 8 rshift spi-wr spi-wr \ посылка 2 байтов        
         spi-wr16
         d# 2 +
+    loop
+    drop
+;
+\ в одном слове один байт значимый
+: sd-write-1byte ( buff buff_size -- )
+    0do
+        dup @
+        spi-wr
+        d# 1 +
     loop
     drop
 ;
@@ -137,7 +146,6 @@ create CMD58
         h# ff =
     until
 ;
-
 : sd-wait-datatoken ( token -- ) 
     \ wait for token
     begin 
@@ -148,14 +156,12 @@ create CMD58
     until
     drop
 ;
-
 : sd-send-command ( cmd -- response )
     sd-wait-notbusy
-    d# 6 sd-write-bytes 
+    d# 6 sd-write-2bytes
     sd-dummy
     h# FF spix
 ;
-
 : sd-read-block ( buffer block. --  )
     spi_csn off
     sd-wait-notbusy
@@ -174,7 +180,6 @@ create CMD58
     sd-readR1 drop  
     spi_csn on 
 ; 
-
 : sd-write-block ( block. --  )
     spi_csn off
     sd-wait-notbusy
@@ -190,7 +195,7 @@ create CMD58
     \ d# 2 . depth .
     DATA_TOKEN_CMD24 spi-wr  \ sd-wait-datatoken
     \ d# 3 . depth .
-    buffer d# 512 sd-write-bytes 
+    buffer d# 512 sd-write-2bytes
     \ d# 4 . depth .
     h# FFFF spi-wr16 \ crc 2 bytes  msb     
     \ d# 41 . depth .    
@@ -204,7 +209,6 @@ create CMD58
     sd-wait-notbusy
     spi_csn on 
 ; 
-
 : sd-cold
     \ Step 1.
     spi_csn on
@@ -224,7 +228,8 @@ create CMD58
      drop
     \ uint8_t resp[4]
     \ d# 31 . depth . 
-    buffer d# 4 sd-read-2bytes
+    \ buffer d# 4 sd-read-2bytes
+    spi-dummy spi-dummy spi-dummy spi-dummy
     \   if(((resp[2] & 0x01) != 1) || (resp[3] != 0xAA)) {
     \ d# 32 . depth . 
     \ Step 4.  And then initiate initialization with ACMD41 with HCS flag (bit 30).
@@ -240,7 +245,8 @@ create CMD58
     the card is a high-capacity card known as SDHC/SDXC )
     CMD58 sd-send-command
     drop 
-    buffer d# 4 sd-read-2bytes
+    \ buffer d# 4 sd-read-2bytes
+    spi-dummy spi-dummy spi-dummy spi-dummy
     \ if((resp[0] & 0xC0) != 0xC0) {
     \ d# 4 . depth . 
     spi_csn on

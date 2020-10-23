@@ -130,7 +130,8 @@ variable dying
     + swap ! ;
 
 : .status
-    'emit @ >r ['] vga-emit 'emit !
+    'emit @ >r
+    ['] vga-emit 'emit !
 
     home
     s" LIVES " type lives @ .
@@ -139,19 +140,22 @@ variable dying
     cr
 
     lives @ 0= if
-        \ ['] vga-bigemit 'emit ! \ sds
-         ['] vga-emit 'emit !
-        d# 8 d# 7  vga-at-xy s" GAME" type
-        d# 8 d# 17 vga-at-xy s" OVER" type
+         ['] vga-bigemit 'emit ! \ sds
+        \ ['] vga-emit 'emit !
+        d# 8 d# 7  vga-at-xy \ s" GAME" type
+        [char] G vga-bigemit [char] A vga-bigemit
+        [char] M vga-bigemit [char] E vga-bigemit
+        d# 8 d# 17 vga-at-xy \ s" OVER" type
+        [char] O vga-bigemit [char] V vga-bigemit
+        [char] E vga-bigemit [char] R vga-bigemit
     then
-
     r> 'emit !
 ;
 
 : newlife
     d# -1 lives +! .status
     d# 0 dying !
-    d# 100 playerx !
+    d# 300 playerx !
 ;
 
 : parabolic ( dx dy i -- ) \ move sprite i in parabolic path
@@ -396,9 +400,12 @@ depth if snap then
     d# 9000000. vision setalarm
 
     gameloop
+    
+    'emit @ >r
+    ['] serout 'emit !
+    
     snap
-
     frame @ . s"  frames" type cr
-    key
+    r> 'emit !
 ;
 

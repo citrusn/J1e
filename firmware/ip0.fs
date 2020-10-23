@@ -67,4 +67,11 @@ meta
 
 target
 
+( IP address formatting                      JCB 14:50 10/26/10)
+
+: #ip1  h# ff and s>d #s 2drop ;
+: #.    [char] . hold ;
+: #ip2  dup #ip1 #. d# 8 rshift #ip1 ;
+: #ip   ( ip -- c-addr u) dup #ip2 #. over #ip2 ;
+
 ]module

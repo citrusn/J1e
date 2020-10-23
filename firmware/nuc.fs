@@ -29,7 +29,8 @@ module[ nuc"
 ;
 
 : c@    dup @ swap d# 1 and if d# 8 rshift else d# 255 and then ;
-: c@l   dup @ swap d# 1 and if d# 255 and else d# 8 rshift then ; \ sds первый байт - младший
+\ sds первый байт - младший
+: c@be   dup @ swap d# 1 and if d# 255 and else d# 8 rshift then ; 
 : c!    ( u c-addr )
         swap h# ff and dup d# 8 lshift or swap
         tuck dup @ swap         ( c-addr u v c-addr )
@@ -420,21 +421,17 @@ create pad 84 allot create pad|
 ;
 [ELSE]
 : emit-uart drop ;
-: emit-uart1 drop ;
 [THEN]
 
 create 'emit
- meta emit-uart t, target \ it's magic
+meta emit-uart t, target \ it's magic
 : emit 'emit @ execute ;
-
-create 'sd-read-bytes
- meta emit-uart1 t, target
-: sd-read-bytes 'sd-read-bytes @ execute ;
 
 : cr d# 13 emit d# 10 emit ;
 d# 32 constant bl
 : space bl emit ;
 : spaces    begin dup 0> while space 1- repeat drop ;
+: dropall   begin depth while drop repeat ;
 
 : hex1 d# 15 and dup d# 10 < if d# 48 else d# 55 then + emit ;
 : hex2
@@ -548,5 +545,10 @@ build-debug? [IF]
 
 : rise?   ( u a -- f ) 2dup @ u> >r ! r> ;
 : fall?   ( u a -- f ) 2dup @ u< >r ! r> ;
+
+code in end-code
+: on ( a -- ) d# 1 swap ! ;
+code out end-code
+: off ( a -- ) d# 0 swap ! ;
 
 ]module

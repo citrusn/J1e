@@ -61,3 +61,4 @@ greybox_tmp/
 Lib/
 synth/
 Ay_emul/
+*.bak

@@ -40,7 +40,7 @@
     2к экран логотипа               с 20 сектора +
     16к спрайты 16 цифр по 1 кб     с 25 сектора +
     16к спрайты 16 blob по 1 кб     с 70 сектора +
-    16к спрайты 16 inv  по 1 кб     с 115 сектора +
+    16к спрайты 16 inv  по 1 кб     с 110 сектора +
     2к psg звук combat 6            с 170 сектора +
 )
 
@@ -56,41 +56,7 @@ include basewords.fs
 target
 include hwdefs.fs
 
-0 [IF]
-    h# 1f80 org
-    \ the RAM Bootloader copies 2000-3f80 to 0-1f80, then branches to zero
-    : bootloader
-        h# 1f80 h# 0
-        begin
-            2dupxor
-        while
-            dup h# 2000 + @
-            over !
-            d# 2 +
-        repeat
-
-        begin dsp h# ff and while drop repeat
-        d# 0 >r
-    ;
-[ELSE]
-    h# 3f80 org
-    \ the Flash Bootloader copies 0x190000 to 0-3f80, then branches to zero
-    : bootloader
-        h# c flash_a_hi !
-        h# 0 begin
-            dup h# 8000 + flash_a !
-            d# 0 flash_oe_n !
-            flash_d @
-            d# 1 flash_oe_n !
-            over dup + !
-            d# 1 +
-            dup h# 1fc0 =
-        until
-
-        begin dsp h# ff and while drop repeat
-        d# 0 >r
-    ;
-[THEN]
+include bootloader.fs
 
 4 org
 module[ everything"
@@ -98,19 +64,9 @@ include nuc.fs
 
 include version.fs
 
-\ 33333333 / 115200 = 289, half cycle is 144
-
-: pause144
-    d# 0 d# 45
-    begin
-        1-
-        2dup=
-    until
-    2drop
-;
-
 : frac ( ud u -- d1 u1 ) \ d1+u1 is ud
-    >r 2dup d# 1 r@ m*/ 2swap 2over r> d# 1 m*/ d- drop ;
+    >r 2dup d# 1 r@ m*/ 2swap 2over r> d# 1 m*/ d- drop 
+;
 : .2  s>d <# # # #> type ;
 : build.
     decimal
@@ -124,52 +80,31 @@ include version.fs
     r> .2 [char] : emit
     r> .2 ;
 
-: net-my-mac h# 1234 h# 5677 h# 7777 ;
-
-include doc.fs
+\ : net-my-mac h# 1234 h# 5677 h# 7777 ; \ sds
+include doc.fs \ sds
 include time.fs
-include eth-ax88796.fs
-include packet.fs
-include ip0.fs
-include defines_tcpip.fs
-include defines_tcpip2.fs
-include arp.fs
-include ip.fs
-include udp.fs
-include dhcp.fs
-
-: serout ( u -- )
-    RS232_TXD !
-    ( h# 300 or   \ 1 stop bits + 1 parity bit
-    2*          \ 0 start bit
-    \ Start bit
-    begin
-        dup RS232_TXD ! 2/
-        pause144
-        pause144
-        dup 0=
-    until
-    drop 
-    pause144 pause144 
-    pause144 pause144 )
-    \ интервал между началами отправки стартового бита. 80 мало
-    \ 1 бит 8.6 microSec
-    d# 100. sleepus    \ 80 - 8X мкС. 100 - 104,3 mS.
-;
-
-code in end-code
-: on ( a -- ) d# 1 swap ! ;
-code out end-code
-: off ( a -- ) d# 0 swap ! ;
+\ include eth-ax88796.fs \ sds
+\ include packet.fs \ sds
+\ include ip0.fs \ sds
+\ include defines_tcpip.fs \ sds
+\ include defines_tcpip2.fs \ sds
+\ include arp.fs \ sds
+\ include ip.fs \ sds
+\ include udp.fs \ sds
+\ include dhcp.fs \ sds
 
 include spi.fs \ sds
+include ay8910.fs
+\ include flash.fs \ sds
+include sprite.fs
+include uart.fs
 
 : sd>memory ( buffer block n -- )
     \ для экрана и знакогенератора
     \ читаем один байт с карты и пишем его 
     \ в память 8 битную
     'sd-read-bytes @ >r
-    ['] sd-read-1bytes 'sd-read-bytes !
+    ['] sd-read-IO 'sd-read-bytes !
     0do 
         2dup ( buffer block buffer block )
         s>d sd-read-block ( buffer block )
@@ -179,145 +114,7 @@ include spi.fs \ sds
     r> 'sd-read-bytes !
 ;
 
-include ay8910.fs
-
-\ include flash.fs \ sds
-
-include sprite.fs
-
-variable cursory \ ptr to start of line in video memory
-variable cursorx \ offset to char
-
-64 constant width
-50 constant wrapcolumn
-
-: vga-at-xy ( u1 u2 )
-    cursory !
-    cursorx !
-;
-
-: home  d# 0 vga_scroll ! d# 0 d# 0 vga-at-xy ;
-
-: vga-line ( -- a ) \ address of current line
-    cursory @ vga_scroll @ + d# 31 and d# 6 lshift 
-    h# 8000 or
-;
-
-: vga-erase ( a u -- )
-    bounds begin
-        2dupxor
-    while
-        h# 00 over ! 1+
-    repeat 2drop
-;
-
-: vga-page
-    home vga-line d# 2048 vga-erase
-    hide
-;
-
-: down1
-    cursory @ d# 31 <> if
-        d# 1 cursory +!
-    else
-        false if
-            d# 1 vga_scroll +!
-            vga-line width vga-erase
-        else
-            home
-        then
-    then
-;
-
-: vga-emit ( c -- )    
-    dup d# 13 = if
-        drop d# 0 cursorx !
-    else
-        dup d# 10 = if
-            drop down1
-        else
-            \ d# -32 +
-            vga-line cursorx @ + !
-            d# 1 cursorx +!
-            cursorx @ wrapcolumn = if
-                d# 0 cursorx !
-                down1
-            then
-        then
-    then
-;
-
-
-
-: vga-cold
-    \ h# f800 h# f000 do \ sds
-    \    d# 0 i !
-    \ loop
-
-    vga-page
-
-    \ pic: Copy 2048 bytes from 180000 to 8000
-    \ chr: Copy 2048 bytes from 180800 to f000
-    \ h# 180000. h# 8000 flash>ram \ sds
-    \ h# 180800. h# f000 flash>ram \ sds chars fonts 8*8
-
-    \ ['] vga-emit 'emit !
-;
-
-create glyph 8 allot
-: wide1 ( c -- )
-    swab
-    d# 8 0do
-        dup 0<
-        if d# 15 else sp then
-        \ if [char] * else [char] . then
-        vga-emit
-        2*
-    loop drop
-;
-
-: table-chars-read ( n -- )
-    buffer swap ( buffer n  )
-    s>d 2dup ( buffer block. block. )
-    s" sd-read " type d. s" block " type ( buffer block. )
-    sd-read-block  ( buffer block. )
-    \ buffer d# 512 dump
-;
-
-: vga-bigemit ( c -- )    
-    dup d# 13 = if
-        drop d# 0 cursorx !
-    else
-        dup d# 10 = if
-            drop d# 8 0do down1 loop
-        else
-            \ sp - d# 8 *  s>d   \ отнять код пробела            
-            d# 8 * dup ( addr addr -- ) \ адрес в знакогенераторе
-            \ расчет номера сектора карты в память начиная с 10
-            \ исходя из 512 байт на сектор
-            d# 9 rshift d# 10 + table-chars-read 
-            d# 511 and \ адрес  в пределах блока 512 байт
-            
-            \ h# 180800. d+ d2/  \ 16 бит шина данных 
-            buffer +             \ 
-            d# 4 0do
-                \ 2dup flash@ swab
-                dup @ swab
-                i cells glyph + !
-                2+
-            loop drop
-            \ glyph d# 8 dump
-            d# 7 0do
-                i glyph + c@ wide1
-                d# -8 cursorx +! down1
-            loop
-            d# 7 glyph + c@ wide1
-
-            d# -7 cursory +!
-        then
-    then
-;
-
+include vga.fs
 ( Demo utilities                             JCB 10:56 12/05/10)
 
 : statusline ( a u -- ) \ display string on the status line
@@ -332,167 +129,18 @@ variable seed
 : random  ( -- u )
     seed @ d# 23947 * d# 57711 xor dup seed ! ;   
 
-
 \ Each line is 20.8 us, so 1000 instructions
 
 include sincos.fs
+include stars.fs
 
-( Stars                                      JCB 15:23 11/15/10)
-
-2variable vision
-variable frame
-128 constant nstars
-create stars 1024 allot
-
-: star 2* cells stars + ;
-: 15.*  m* d2* nip ;
-
-\ >>> math.cos(math.pi / 180) * 32767
-\ 32762.009427189474
-\ >>> math.sin(math.pi / 180) * 32767
-\ 571.8630017304688
-
-[ pi 128e0 f/ fcos 32767e0 f* f>d drop ] constant COSa
-[ pi 128e0 f/ fsin 32767e0 f* f>d drop ] constant SINa
-
-: rotate ( i -- ) \ rotate star i
-    star dup 2@ ( x y )
-    over SINa 15.* over COSa 15.* + >r
-    swap COSa 15.* swap SINa 15.* - r>
-    rot 2!
-;
-
-: rotateall
-    d# 256 0do i rotate loop ;
-
-: scatterR
-    nstars 0do
-        random d# 0 i star 2!
-        rotateall
-        rotateall
-        rotateall
-        rotateall
-    loop
-;
-
-: scatterSpiral
-    nstars 0do
-        i d# 3 and 1+ d# 8000 *
-        d# 0 i star 2!
-        rotateall
-        rotateall
-        rotateall
-        rotateall
-    loop
-;
-
-: scatter
-    nstars 0do
-        \ d# 0 random
-        d# 0 i sin
-        i star 2!
-        i random d# 255 and 0do
-            dup rotate
-        loop drop
-    loop
-;
-
-: /128  dup 0< h# fe00 and swap d# 7 rshift or ;
-: tx    /128 [ 400 ] literal + ;
-: ty    /128 [ 256 ] literal + ;
-
-: plot ( i s ) \ plot star i in sprite s
-    >r
-    dup star @ tx swap d# 2 lshift
-    r> sprite!
-;
-
-( Display list                               JCB 16:10 11/15/10)
-
-create dl 1026 allot
-
-: erasedl
-    dl d# 1024 bounds begin
-        d# -1 over !
-        cell+ 2dup=
-    until 2drop
-;
-
-: makedl
-    erasedl
-
-    nstars 0do
-        i d# 2 lshift
-        cells dl +
-        \ cell occupied, use one below
-        \ dup @ 0< invert if cell+ then
-        i swap !
-    loop
-;
-
-variable lastsp
-: stars-chasebeam
-    hide
-    d# 0 lastsp !
-    d# 512 0do
-        begin vga-line@ i = until 
-        i cells dl + @ dup 0< if
-            drop
-        else
-            lastsp @ 1+ d# 7 and dup lastsp ! 
-            plot
-        then
-        i nstars < if i rotate then
-    loop
-;
-
-
-
-: loadcolors
-    d# 8 0do
-        dup @
-        i cells vga_spritec + !
-        cell+
-    loop
-    drop
-;
-create cpastels
-h# 423 ,
-h# 243 ,
-h# 234 ,
-h# 444 ,
-h# 324 ,
-h# 432 ,
-h# 342 ,
-h# 244 ,
-: pastels cpastels loadcolors ;
-
-create crainbow
-h# 400 ,
-h# 440 ,
-h# 040 ,
-h# 044 ,
-h# 004 ,
-h# 404 ,
-h# 444 ,
-h# 444 ,
-: rainbow crainbow loadcolors ;
-
-variable prev_sw3_n
-
-: next? ( -- f ) \ has user requested next screen
-     sw3_n @ prev_sw3_n fall?
-    \ d# 0
-;
-
-\ : loadsprites ( da -- )
+\ : loadsprites \ ( da -- )
 \    2/
 \    d# 16384 0do
 \        \ 2dup i s>d d+ flash@ \ sds
 \        i vga_spritea !  vga_spriteport !
 \    loop
-\   2drop ;
-
+\   2drop ; 
 : loadsprites ( block -- )
     'sd-read-bytes @ >r
     ['] sd-read-sprite 'sd-read-bytes !
@@ -506,53 +154,11 @@ variable prev_sw3_n
     drop
     r> 'sd-read-bytes !
 ;
+\ include ip-handlers.fs \sds
 
-\ include loader.fs \sds
-include dns.fs
-
-: preip-handler
-    begin
-        mac-fullness
-    while
-        OFFSET_ETH_TYPE packet@ h# 800 = if
-            dhcp-wait-offer
-        then
-        mac-consume
-    repeat
-;
-
-: haveip-handler
-    \ time@ begin ether_irq @ until time@ 2swap d- d. cr
-    \ begin ether_irq @ until
-    begin
-        mac-fullness
-    while
-        arp-handler
-        OFFSET_ETH_TYPE packet@ h# 800 =
-        if
-            d# 2 OFFSET_IP_DSTIP mac-inoffset mac@n net-my-ip d=
-            if
-                icmp-handler
-            then
-            \ loader-handler \ sds
-        then
-        depth if .s cr then
-        mac-consume
-    repeat
-;
-
-: uptime
-    time@    
-    d# 1 d# 1000 m*/
-    d# 1 d# 1000 m*/
-;
-
-( IP address formatting                      JCB 14:50 10/26/10)
-
-: #ip1  h# ff and s>d #s 2drop ;
-: #.    [char] . hold ;
-: #ip2  dup #ip1 #. d# 8 rshift #ip1 ;
-: #ip   ( ip -- c-addr u) dup #ip2 #. over #ip2 ;
+variable prev_sw3_n
+: next? ( -- f ) \ has user requested next screen
+     sw3_n @ prev_sw3_n fall? ;
 
 variable prev_sw2_n
 : sw2?  sw2_n @ prev_sw2_n fall? ;
@@ -564,7 +170,7 @@ include ps2kb.fs
         key TAB = and 
     then ;
 
-: isesc? ( -- f )
+: isesc1? ( -- f )
     key? dup if         
         key ESC = and 
     then ;
@@ -597,8 +203,8 @@ include invaders.fs
 
     time@ xor seed !
     seed off
-    \ scatterSpiral
-     scatterR
+     scatterSpiral
+    \ scatterR
     \ scatter
 
     depth if snap drop pause then
@@ -616,20 +222,28 @@ include invaders.fs
     until
     depth if snap drop pause then
     frame @ . s"  frames" type cr
-    \ sleep.1
-
-    pause
+    sleep1
+    \ pause
 ;
+: net-my-ip h# 12345678. ; \ fict ip
+: #ip1  h# ff and s>d #s 2drop ;
+: #.    [char] . hold ;
+: #ip2  dup #ip1 #. d# 8 rshift #ip1 ;
+: #ip   ( ip -- c-addr u) dup #ip2 #. over #ip2 ;
 
 : welcome-main
-    vga-cold
+  depth if snap then      
+    vga-cold    
     home
+    'emit @ >r
+    ['] vga-emit 'emit !
+
     s" F1 to set up network, TAB for next demo" statusline
+  depth if snap then
 
     rainbow
-    d# 25 loadsprites \ h# 200000. loadsprites
+    d# 25 loadsprites \ h# 200000. loadsprites    
     
-    'emit @ >r
     d# 6 d# 26 vga-at-xy s" Softcore Forth CPU" type
 
     d# 32 d# 6 vga-at-xy  s" version " type version type
@@ -637,84 +251,32 @@ include invaders.fs
 
     \ kb-cold
     home    
+  depth if snap then
     begin
         \ kbfifo-proc          
+    depth if snap then
         d# 32 d# 10 vga-at-xy net-my-ip <# #ip #> type space space
-
+    depth if snap then
         d# 32 d# 12 vga-at-xy s" uptime  " type uptime d.
         \ haveip-handler
-        
+    depth if snap then    
         d# 8 0do
             frame @ i d# 32 * + invert >r
             d# 100 r@ sin* d# 600 +
             d# 100 r> cos* d# 334 +
             i sprite!
-        loop
-        
+        loop 
+    depth if snap then   
         waitblank
         d# 1 frame +!        
  
         next?
         istab? or
     until
+  depth if snap then
     r> 'emit !
 ;
-
-include clock.fs
-
-: frob
-    flash_ce_n    on
-    flash_ddir off
-    d# 32 0do
-        d# 1 i d# 7 and lshift
-        flash_d !
-        d# 30000. sleepus
-    loop
-    flash_ddir on
-;
-
-: fill-screen (  --  ) \ заполнение экранной памяти
-    h# 800 0do \ число символов
-       i h# 8000 i + ! \ адрес экранной памяти
-    loop
-;
-
-: fill-chars (  --  ) \ заполнение знакогенератора
-    h# f800 h# f000 do \ число символов
-       d# 0 i ! \ очистка по адресу экранной памяти
-    loop
-    
-    \ h# f000 d# 2047 d# 0 fill
-    h# 256 0do \ число символов
-        i d# 8 i * h# f000 + ! \ адрес знакогенератора
-    loop
-;
-
-(  \ переносит данные из программной 
-    \ 16 битной памяти в 8 битную 
- buffer d# 15 d# 1 sd>memory \ знакогенератор        
-    h# f000
-    d# 256 0do ( addr  
-        buffer i cells + @ 2dup i buffer - . dup . cr ( addr u addr u 
-        d# 8 rshift swap ! ( addr u 
-         swap 1+  ( u addr+1  
-        tuck ( addr+1 u addr+1 
-        ! 1+ ( addr+1  
-    loop 
-    drop
-)
-
-
-: j1-logo ( -- )
-    s" j1-logo" type cr 
-    h# f000 d# 15 d# 1 sd>memory \ знакогенератор  
-    h# 8000 d# 20 d# 4 sd>memory \  экранная память
-;
-
-: chars-table-cold
-    h# f000 d# 10 d# 4 sd>memory \ знакогенератор  
-;
-
+\ include clock.fs \ sds
 : sd-test \ тест сд карты
     cr cr  s" start " type
     \ sd-cold \ depth .  
@@ -731,7 +293,6 @@ include clock.fs
     buffer h# 00000008. sd-read-block  
     buffer d# 512 dump
 ;
-
 : kbd-test
     begin 
         key dup [char] q = if
@@ -743,84 +304,99 @@ include clock.fs
     again
     \ begin key? curkey emit  again
 ;
-
 : uart-test
-    ['] serout 'emit !
-    begin
-        RS232_RD_VALID @ if 
-            \ [char] a serout
-            RS232_RD @  emit             
-            \ [char] q = if exit then            
-        then
-    again
+  ['] serout 'emit !
+  begin
+    ser? if
+      serin emit
+      \ [char] q = if exit then
+      then
+  again 
 ;
-
 : ay-test ( -- )
   begin              
     key [char] z = if ay-shot then
   again
 ;
-
-: vga-bigemit-test    
-    \ vga-cold 
-    [char] ?  vga-emit
-    [char] B  vga-emit
-    [char] C  vga-emit
-    [char] ?  vga-bigemit
-    [char] @  vga-bigemit
-    [char] A  vga-bigemit
+: vga-bigemit-test
+  depth if snap then
+    \ vga-cold
+    [char] ? vga-emit
+    [char] B vga-emit
+    [char] C vga-emit
+  depth if snap then
+    ['] vga-bigemit 'emit ! \ sds
+    \ ['] serout 'emit !
+    s" HELLO" type
+    \ depth if snap then
+    \ [char] ?  vga-bigemit
+    \ depth if snap then
+    \ [char] @  vga-bigemit
+    \ depth if snap then
+    \ [char] A  vga-bigemit 
+    \ depth if snap then
     \ коды >=128 русские буквы
-    h# 80 vga-emit h# 81 vga-emit h# 82 vga-emit cr
+    h# 80 vga-emit h# 87 vga-emit d# 159 vga-emit cr
     'emit @ >r
     ['] vga-emit 'emit !
-    s" привет, мир" type \ не работает
+    s" привет hello" type \ не работает
     r> 'emit !
+  depth if snap then
 ;
-
+: j1-logo ( -- )
+    s" j1-logo" type cr
+    h# f000 d# 15 d# 2 sd>memory \ знакогенератор
+    h# 8000 d# 20 d# 4 sd>memory \  экранная память
+    \ chars-table-cold \ вернуть как было не выйдет сразу
+;
+include uart-handler.fs
 : main
-    decimal
+    decimal    
     ['] serout 'emit !
-    ['] sd-read-2bytes 'sd-read-bytes !     
-    sleep1
+    ['] sd-read-MEM 'sd-read-bytes !     
+    dropall
+    sleep.1
 
+    ay-cold
+depth if snap then
     sd-cold \ инициализация сд карты
+depth if snap then    
     vga-cold
+depth if snap then    
     kb-cold
 
     d# 6 0do cr loop
+depth if snap then    
     s" Welcome! Built " type build. cr 
-    snap        
-
+    s" uart:" type serready .  serin . cr
+    snap
+    \ begin again
     \ frob \ sds    
  
     \ j1-logo
     \ key drop
     \ ay-test
-    \ ay-shot sleep1
-    play-psg
+    \ ay-shot sleep1    
+     begin uart-handler again
+    \ d# 170 play-psg
     \ chars-table-cold
     \ sd-test 
     \ uart-test
     \ kbd-test
-    \ vga-bigemit-test  
+    \ vga-bigemit-test
     \ key drop
     \ flash-cold
     \ flash-demo
-    \ flash-bytes    
-    \ begin 
-    \   next? .
-    \   istab? .
-        \ key? dup if key dup .  TAB = and . cr then
-    \    d# 6000 0do loop
-    \ again \ sds
+    \ flash-bytes
     
-     vga-cold
-    ['] vga-emit 'emit ! 
-    s" Waiting for Ethernet NIC" statusline 
+    \ vga-cold
+    ['] vga-emit 'emit !
+    s" Waiting for Ethernet NIC" statusline
      \ begin again \ sds
 
-    ( mac-cold 
-    nicwork 
+   (
+    mac-cold
+    nicwork
     h# decafbad. dhcp-xid!
     d# 3000000. dhcp-alarm setalarm
     false if
@@ -849,7 +425,7 @@ include clock.fs
     depth if snap then
     pause
     depth if snap then
-    begin
+    ( begin
         \ welcome-main        sleep.1
         \ depth if snap drop pause then
         \ clock-main          sleep.1
@@ -858,10 +434,10 @@ include clock.fs
          invaders-main       sleep.1
         s" looping" type cr
         sleep1
-    again
+    again )
 
     begin
-        haveip-handler
+       \ haveip-handler
     again
 ;
 

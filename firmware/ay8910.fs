@@ -101,8 +101,17 @@ module[ ay8910"
   d# 0  val>reg \ затухание
   \ s" shot down" type cr
 ;
+: ay-cold 
+  d# 8  adr>reg \ амплитуда А 
+  d# 0 val>reg
+  d# 9  adr>reg \ амплитуда B
+  d# 0 val>reg 
+  d# 10 adr>reg \ амплитуда C
+  d# 0 val>reg
+;
 
 variable buf-off
+variable state
 
 : wait20mc ( -- )
     d# 20000. sleepus 
@@ -110,38 +119,50 @@ variable buf-off
 : wait80mc ( c -- )
     drop d# 80000. sleepus 
 ;
-: next-byte ( -- c)
-    d# 1 buf-off +!
+: next-byte ( -- c)    
     buffer buf-off @ + 
-    c@l   \ теперь первый младший       
+    \ @ 
+    c@be \ теперь первый младший
+    d# 1 buf-off +!
 ;
-: end-buffer 
-    buf-off @ d# 512 < 
+: end-buffer ( -- f )
+    buf-off @ d# 512 < \ в буфере 1024 байт из блока
 ;
-: play-buffer ( )   
+: play-buffer ( -- )
     begin
       end-buffer \
-    while      
+    while
       next-byte \ следующий байт
-      dup h# fd = if drop exit else 
-      dup h# ff = if drop wait20mc else 
-      dup h# fe = if drop next-byte wait80mc else
-      adr>reg next-byte val>reg
-      then then then
-    repeat         
+      d# 1 state @ = if d# 0 state ! val>reg else
+      d# 2 state @ = if d# 0 state ! wait80mc else
+      dup h# fd = if ( drop) exit else \ выход в стеке FD
+      dup h# ff = if drop wait20mc else
+      dup h# fe = if drop d# 2 state !  else
+      dup d# 15 > if dup . buf-off @ . then \ смещение в 512 байтовом блоке
+      adr>reg d# 1 state ! \ next-byte 
+      then then then then then
+    repeat
+    d# 0 \ продолжить
 ;
-
-: play-psg ( -- )
-    d# 176 d# 170 do
-      buffer i s>d sd-read-block \ один сектор сд в буфер
-      depth if snap then
-      \ buffer d# 512 dump
-      \ d# 16 buf-off ! \ пропуск заголовка
+: play-psg ( u -- ) \ первый сектор
+  depth if snap then
+    hex
+    \ d# 170 \ первый сектора для чтения 
+    d# 0 state !
+    begin
+      dup
+      buffer swap  s>d sd-read-block \ один сектор сд в буфер  
       d# 0 buf-off !
-      play-buffer ( )
-      i . cr
-      depth if snap then
-    loop
+      cr dup d# 170 - d# 512 * . \ номер 512 байт сектора. отсчет от 170      
+      play-buffer
+      0=
+    while          
+      d# 1 + \ следующий сектор
+    repeat    
+    drop 
+    decimal
+    ay-cold
+  depth if snap then
 ;
 
 ]module

@@ -224,8 +224,7 @@ variable ps2_clk' \ sds убрал
 : oddparity ( u1 -- u2 ) \ u2 is odd parity of u1
     dup d# 4 rshift xor
     dup d# 2 rshift xor
-    dup 2/ xor
-;
+    dup 2/ xor ;
 
 : kb-request
     ps2_clk_dir out ps2_clk off \ clock low
@@ -254,8 +253,8 @@ variable ps2_clk' \ sds убрал
 
 : kbbit
     d# 11 lshift kbstate @ 2/ or
-    kbstate !
-;
+    kbstate ! ;
+
 : rawready? ( -- f) \ is the raw keycode ready?
     kbstate @ d# 1 and  \ sds
     \ kbfifocount @ d# 1 and 
@@ -273,12 +272,7 @@ variable lock
     kbfifocount @ if 
         d# 1 kbstate !
         kbfifo @ kbread !
-    \ else d# 0 kbread !
-    then
-    \ begin rawready? 0= until \ d# 1 .
-    \ begin rawready? until    \ d# 2 .
-    \ begin rawready? 0= until \ d# 3 .
-;
+    then ;
 
 : rawloop1    
     begin
@@ -438,8 +432,7 @@ jumptable keyhandler
     rawloop
     rawready? if
         kbraw handle-raw
-    then
-;
+    then ;
 
 : key?  ( -- flag )    
     kbfifo-proc
@@ -450,9 +443,6 @@ jumptable keyhandler
     curkey @ curkey off ; \ sds    
 
 : pause ( -- )
-\ depth if snap then
-    key drop
-\ depth if snap then
-;
+    key drop ;
 
 ]module

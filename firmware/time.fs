@@ -31,3 +31,8 @@ variable prevth     \ previous high time
 : sleep1    d# 1000000. sleepus ;
 
 : took ( d -- ) time@ 2swap d- s" took " type d. cr ;
+
+: uptime
+    time@    
+    d# 1 d# 1000 m*/
+    d# 1 d# 1000 m*/ ;

@@ -164,4 +164,16 @@ module[ spi"
     drop 2drop
 ;
 
+: frob
+    flash_ce_n    on
+    flash_ddir off
+    d# 32 0do
+        d# 1 i d# 7 and lshift
+        flash_d !
+        d# 30000. sleepus
+    loop
+    flash_ddir on
+;
+
+
 ]module 
