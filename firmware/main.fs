@@ -132,8 +132,6 @@ variable seed
 \ Each line is 20.8 us, so 1000 instructions
 
 include sincos.fs
-include stars.fs
-
 \ : loadsprites \ ( da -- )
 \    2/
 \    d# 16384 0do
@@ -188,43 +186,9 @@ include ps2kb.fs
     else d# 0   
     then ;
 
+include stars.fs
 include invaders.fs
 
-: stars-main
-    vga-page
-    d# 70 loadsprites \ blob.png
-    \ d# 16384 0do \ sds
-    \    h# 204000. 2/ i s>d d+ flash@
-    \    i vga_spritea !  vga_spriteport !
-    \ loop
-
-    \ vga_addsprites on \ not wrking sds
-    rainbow    
-
-    time@ xor seed !
-    seed off
-     scatterSpiral
-    \ scatterR
-    \ scatter
-
-    depth if snap drop pause then
-    d# 7000000. vision setalarm
-    d# 0 frame !    
-    begin
-        makedl
-        stars-chasebeam
-        
-        \ d# 256 0do i i plot loop
-        \ rotateall
-        frame @ 1+ frame !       
-        istab?  
-        next? or
-    until
-    depth if snap drop pause then
-    frame @ . s"  frames" type cr
-    sleep1
-    \ pause
-;
 : net-my-ip h# 12345678. ; \ fict ip
 : #ip1  h# ff and s>d #s 2drop ;
 : #.    [char] . hold ;
@@ -242,6 +206,7 @@ include invaders.fs
   depth if snap then
 
     rainbow
+    pastels
     d# 25 loadsprites \ h# 200000. loadsprites    
     
     d# 6 d# 26 vga-at-xy s" Softcore Forth CPU" type
@@ -262,12 +227,12 @@ include invaders.fs
     depth if snap then    
         d# 8 0do
             frame @ i d# 32 * + invert >r
-            d# 100 r@ sin* d# 600 +
+            d# 140 r@ sin* d# 600 +
             d# 100 r> cos* d# 334 +
             i sprite!
         loop 
     depth if snap then   
-        waitblank
+         waitblank
         d# 1 frame +!        
  
         next?

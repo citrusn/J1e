@@ -29,10 +29,10 @@ module partial(
   input 			alpha,
   input [2:0] 	scale,  // by quarters
   output [7:0] result);
-  assign result = alpha ? (
+  assign result = alpha ? (// original : 0 ;
                         (scale[0] ? original[7:2] : 0) 
                       + (scale[1] ? original[7:1] : 0) 
-                      + (scale[2] ? original : 0)) : 0;
+                      + (scale[2] ? original : 0)): 0;
 endmodule
 
 module lfsre(

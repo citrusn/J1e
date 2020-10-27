@@ -60,7 +60,7 @@ def createSpriteFile():
 
     spr = ["%d.png" % (i/2) for i in range(16)]
     # spr = ["blob.png"] * 16
-    spr = ["fsm-32.png", "pop2.png"]*6+["bomb2.png", "pop.png", "shot2.png", "pop2.png"]
+    spr = ["fsm-32.png", "pop2.png"]*6+["bomb3.png", "pop.png", "shot2.png", "pop2.png"]
 
     print (filepic.name)
     data = loadsprites(spr)

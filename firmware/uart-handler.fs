@@ -12,8 +12,8 @@
         \ uart-char buffer i 2* + !
     loop
     \ buffer d# 128 dump
-    dup . s>d sd-write-block       
-    ok
+    dup s>d sd-write-block       
+    . ok
     depth if snap then
 ;
 : save-block1 
@@ -31,7 +31,7 @@
 : uart-handler ( --)
   depth if snap then
     uart-char 
-    dup [char] s = if drop cr save-block else
+    dup [char] s = if drop save-block cr else
     dup [char] b = if drop cr s" big chars:" type vga-bigemit-test else
     dup [char] t = if drop cr s" stars:" type stars-main else
     dup [char] h = if drop cr s" shot " type ay-shot else
